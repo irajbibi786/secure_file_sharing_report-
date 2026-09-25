@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Secure File Share - Internee.pk</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+  h1 { color: #1a1a1a; }
+  p.subtitle { color: #555; }
+  .file-list { list-style: none; padding: 0; }
+  .file-list li { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+  button { background: #2b7a2b; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #226122; }
+  .flash { background: #eef6ee; border: 1px solid #cde; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+  .upload-box { display: flex; gap: 10px; margin-bottom: 30px; }
+</style>
+</head>
+<body>
+  <h1>Secure File Sharing Portal</h1>
+  <p class="subtitle">Files are encrypted with AES-256 and shared via time-limited signed URLs.</p>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="upload-box">
+    <input type="file" id="fileInput">
+    <button onclick="uploadFile()">Upload</button>
+  </div>
+
+  <h2>Available Files</h2>
+  <ul class="file-list">
+    {% for f in files %}
+      <li>{{ f }} <a href="{{ url_for('download', filename=f) }}"><button>Download</button></a></li>
+    {% else %}
+      <li>No files uploaded yet.</li>
+    {% endfor %}
+  </ul>
+
+<script>
+async function uploadFile() {
+  const fileInput = document.getElementById('fileInput');
+  const file = fileInput.files[0];
+  if (!file) { alert('Choose a file first'); return; }
+
+  // Step 1: ask our Flask backend for a presigned upload URL
+  const res = await fetch(`/generate-upload-url?filename=${encodeURIComponent(file.name)}`);
+  const data = await res.json();
+  if (data.error) { alert(data.error); return; }
+
+  // Step 2: upload the file straight to S3 using that signed URL
+  const uploadRes = await fetch(data.url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'x-amz-server-side-encryption': 'AES256'
+    },
+    body: file
+  });
+
+  if (uploadRes.ok) {
+    alert('File uploaded and encrypted successfully!');
+    location.reload();
+  } else {
+    alert('Upload failed. Check browser console for details.');
+    console.error(await uploadRes.text());
+  }
+}
+</script>
+</body>
+</html>
